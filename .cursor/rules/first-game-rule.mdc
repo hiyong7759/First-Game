@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+- cs 수정은 mcp사용하지말고 cursor에서 직접해
+
+When developing a Unity 2D game, refer to the manual in the path below and develop it.
+https://docs.unity3d.com/6000.0/Documentation/Manual/Unity2D.html
