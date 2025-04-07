@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;  // 씬 관리를 위한 네임스페이스 추가
 
 /// <summary>
 /// 플레이어 캐릭터의 움직임과 상태를 관리하는 클래스
@@ -8,6 +9,13 @@ public class PlayerController : MonoBehaviour
 {
     [Header("Jump Settings")]
     public float jumpForce = 5f;        // 점프 힘
+
+    [Header("Health Settings")]
+    private int maxHealth = 3;
+    public int currentHealth { get; private set; }  // 외부에서 읽기만 가능하도록 수정
+    public bool isInvincible = false;  // 무적 상태
+    public float invincibleTimer = 0f; // 무적 타이머
+    private const float INVINCIBLE_DURATION = 5f; // 무적 지속시간
 
     private Rigidbody2D rb;
     private Animator animator;          // 애니메이터 컴포넌트
@@ -29,7 +37,7 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
-        Debug.Log("초기 점프 횟수: " + jumpCount);
+        currentHealth = maxHealth;  // 생명력 초기화
     }
     
     /// <summary>
@@ -38,26 +46,34 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // 점프 입력 감지
-        if (Input.GetKeyDown(KeyCode.Space))
+        // 무적 시간 업데이트
+        if (isInvincible)
         {
-            // 첫 번째 점프는 지면에 있을 때만 가능
-            if (isGrounded)
+            invincibleTimer -= Time.deltaTime;
+            if (invincibleTimer <= 0f)
             {
-                Jump();
-                jumpCount = 1;
-                Debug.Log("첫 번째 점프! 점프 횟수: " + jumpCount);
+                isInvincible = false;
             }
-            // 두 번째 점프는 공중에서 가능 (이중 점프)
-            else if (jumpCount < MAX_JUMPS)
+        }
+
+        // Playing 상태일 때만 점프 입력 받기
+        if (GameManager.Instance.currentState == GameState.Playing)
+        {
+            // 점프 입력 처리
+            if (Input.GetKeyDown(KeyCode.Space))
             {
-                Jump();
-                jumpCount = MAX_JUMPS;  // 최대 점프 횟수에 도달했음을 표시
-                Debug.Log("두 번째 점프! 점프 횟수: " + jumpCount);
-            }
-            else
-            {
-                Debug.Log("점프 불가! 최대 점프 횟수 도달. 현재 점프 횟수: " + jumpCount);
+                // 첫 번째 점프는 지면에 있을 때만 가능
+                if (isGrounded)
+                {
+                    Jump();
+                    jumpCount = 1;
+                }
+                // 두 번째 점프는 공중에서 가능 (이중 점프)
+                else if (jumpCount < MAX_JUMPS)
+                {
+                    Jump();
+                    jumpCount = MAX_JUMPS;  // 최대 점프 횟수에 도달했음을 표시
+                }
             }
         }
 
@@ -65,11 +81,19 @@ public class PlayerController : MonoBehaviour
         if (!wasGrounded && isGrounded)
         {
             animator.SetInteger(ANIM_STATE, STATE_LAND);
-            Debug.Log("착지 애니메이션 재생!");
         }
 
         // 현재 상태를 저장
         wasGrounded = isGrounded;
+    }
+
+    private void FixedUpdate()
+    {
+        // Playing 상태일 때만 물리 업데이트
+        if (GameManager.Instance.currentState == GameState.Playing)
+        {
+            // 물리 업데이트 코드...
+        }
     }
 
     /// <summary>
@@ -97,8 +121,32 @@ public class PlayerController : MonoBehaviour
         {
             isGrounded = true;
             jumpCount = 0;  // 점프 횟수 초기화
-            Debug.Log("지면에 착지! 점프 횟수 초기화: " + jumpCount);
-            // 착지 애니메이션은 Update에서 처리하므로 여기서는 설정하지 않음
+        }
+    }
+
+    /// <summary>
+    /// 트리거 충돌을 처리합니다.
+    /// </summary>
+    private void OnTriggerEnter2D(Collider2D other)
+    {
+        // 무적이 아닐 때만 적과의 충돌 처리
+        if (other.CompareTag("enemy") && !isInvincible)
+        {
+            ModifyHealth(-1);
+            Destroy(other.gameObject);  // 적 제거
+        }
+        // Golden Baechu와 충돌
+        else if (other.CompareTag("golden"))
+        {
+            isInvincible = true;
+            invincibleTimer = INVINCIBLE_DURATION;
+            Destroy(other.gameObject);
+        }
+        // 일반 음식과 충돌
+        else if (other.CompareTag("food"))
+        {
+            ModifyHealth(1);
+            Destroy(other.gameObject);
         }
     }
     
@@ -117,6 +165,42 @@ public class PlayerController : MonoBehaviour
             {
                 animator.SetInteger(ANIM_STATE, STATE_JUMP);
             }
+        }
+    }
+
+    /// <summary>
+    /// 플레이어의 생명력을 수정합니다.
+    /// </summary>
+    private void ModifyHealth(int amount)
+    {
+        currentHealth += amount;
+        currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
+        
+        if (currentHealth <= 0)
+        {
+            GameManager.Instance.GameOver();
+        }
+    }
+
+    public void ResetPlayer()
+    {
+        currentHealth = maxHealth;
+        isInvincible = false;
+        invincibleTimer = 0f;
+        jumpCount = 0;
+        isGrounded = false;
+        
+        // 위치 초기화
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+            transform.position = new Vector3(-6f, -2f, 0f); // 시작 위치로
+        }
+        
+        // 애니메이션 초기화
+        if (animator != null)
+        {
+            animator.SetInteger(ANIM_STATE, STATE_RUN);
         }
     }
 }
